@@ -8,12 +8,13 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy source code and config files
+# Copy source code and config files (will be overridden by volume mount in dev)
 COPY . .
 
 # Expose port
 EXPOSE 3000
 
 # Run in development mode with hot reload
+# Vite will automatically reload on file changes
 CMD ["npm", "run", "dev"]
 

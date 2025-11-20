@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { SearchRequest } from '../types';
-import { submitSearch, createSSEStream, getSearchResults, getSearchStatus } from '../services/api';
-import { useSearchState, SearchStatus } from './useSearchState';
+import { fetchFlights, searchFlights, createSSEStream, getFetchStatus } from '../services/api';
+import { useSearchState, SearchStatus, JobStatus } from './useSearchState';
 
 interface UseSearchReturn {
   searchId: string | null;
@@ -9,7 +9,10 @@ interface UseSearchReturn {
   status: SearchStatus;
   errorMessage: string | null;
   isSearching: boolean;
+  jobs: { [source: string]: JobStatus };
+  handleFetch: (request: SearchRequest) => Promise<void>;
   handleSearch: (request: SearchRequest) => Promise<void>;
+  updateJobs: (jobs: { [source: string]: JobStatus }) => void;
 }
 
 export function useSearch(): UseSearchReturn {
@@ -19,11 +22,13 @@ export function useSearch(): UseSearchReturn {
     status,
     errorMessage,
     isSearching,
+    jobs,
     setSearchId,
     setResults,
     setStatus,
     setErrorMessage,
     setIsSearching,
+    setJobs,
     reset,
   } = useSearchState();
 
@@ -31,29 +36,78 @@ export function useSearch(): UseSearchReturn {
     async (request: SearchRequest) => {
       try {
         setIsSearching(true);
+        setErrorMessage(null);
+
+        // Search DB for existing results
+        const searchResults = await searchFlights(request);
+        if (searchResults.results && searchResults.results.length > 0) {
+          setResults(searchResults.results);
+          setStatus('completed');
+        } else {
+          setResults([]);
+          setStatus('completed');
+        }
+
+        // Also fetch job statuses to show in progress area
+        try {
+          const statusResponse = await getFetchStatus(request);
+          if (statusResponse.jobs) {
+            setJobs(statusResponse.jobs as { [source: string]: JobStatus });
+          }
+        } catch (error) {
+          console.warn('Error fetching job statuses:', error);
+          // Don't fail the search if status fetch fails
+        }
+
+        setIsSearching(false);
+      } catch (error) {
+        console.error('Error searching DB:', error);
+        setIsSearching(false);
+        setStatus('error');
+        setErrorMessage(
+          error instanceof Error ? error.message : 'An unknown error occurred while searching'
+        );
+      }
+    },
+    [setIsSearching, setStatus, setErrorMessage, setResults, setJobs]
+  );
+
+  const handleFetch = useCallback(
+    async (request: SearchRequest) => {
+      try {
+        setIsSearching(true);
         reset();
         setStatus('processing');
         setErrorMessage(null);
 
-        const response = await submitSearch(request);
-        setSearchId(response.searchId);
-
-        // If we have existing results, set them immediately
-        if (response.results && response.results.length > 0) {
-          setResults(response.results);
-          if (response.status === 'completed') {
-            setIsSearching(false);
-            setStatus('completed');
-            return; // Don't set up SSE if search is already completed
+        // First, search DB for existing results
+        try {
+          const searchResults = await searchFlights(request);
+          if (searchResults.results && searchResults.results.length > 0) {
+            setResults(searchResults.results);
           }
-        } else if (response.isExisting) {
-          // Existing search but no results yet
-          setResults([]);
+        } catch (error) {
+          console.warn('Error searching DB:', error);
+          // Continue with fetch even if search fails
         }
 
-        // Set up SSE stream for real-time updates
+        // Trigger fetch for all sources
+        const response = await fetchFlights(request);
+        setSearchId(response.searchId);
+
+        // Set initial job statuses
+        if (response.jobs) {
+          setJobs(response.jobs as { [source: string]: JobStatus });
+        }
+
+        // If we have existing results from fetch response, merge them
+        if (response.results && response.results.length > 0) {
+          setResults(response.results);
+        }
+
+        // Set up SSE stream for real-time fetch updates
         const eventSource = createSSEStream(
-          response.searchId,
+          request,
           async (data) => {
             console.log('SSE update:', data);
             
@@ -62,26 +116,35 @@ export function useSearch(): UseSearchReturn {
               console.error('SSE error message:', data.error);
               setIsSearching(false);
               setStatus('error');
-              setErrorMessage(data.error || 'Search error occurred');
+              setErrorMessage(data.error || 'Fetch error occurred');
               eventSource.close();
               return;
             }
             
             setStatus(data.status as SearchStatus);
             
-            // Update results if they're included in the SSE update
-            if (data.results !== undefined) {
-              setResults(data.results);
+            // Update job statuses if included in SSE update
+            if (data.jobs) {
+              setJobs(data.jobs as { [source: string]: JobStatus });
             }
             
+            // When fetch completes, automatically search DB for results
             if (data.status === 'completed') {
-              // If results weren't in SSE update, fetch them
-              if (data.results === undefined) {
-                try {
-                  const resultsResponse = await getSearchResults(response.searchId);
-                  setResults(resultsResponse.results || []);
-                } catch (error) {
-                  console.error('Error fetching results:', error);
+              try {
+                const searchResults = await searchFlights(request);
+                if (searchResults.results && searchResults.results.length > 0) {
+                  setResults(searchResults.results);
+                } else {
+                  // Use results from SSE if available
+                  if (data.results !== undefined) {
+                    setResults(data.results);
+                  }
+                }
+              } catch (error) {
+                console.error('Error searching DB after fetch:', error);
+                // Use results from SSE if available
+                if (data.results !== undefined) {
+                  setResults(data.results);
                 }
               }
               setIsSearching(false);
@@ -90,8 +153,13 @@ export function useSearch(): UseSearchReturn {
             } else if (data.status === 'failed') {
               setIsSearching(false);
               setStatus('error');
-              setErrorMessage('Search failed');
+              setErrorMessage('Fetch failed');
               eventSource.close();
+            } else {
+              // Update results during fetch if available
+              if (data.results !== undefined) {
+                setResults(data.results);
+              }
             }
           },
           (error) => {
@@ -105,46 +173,8 @@ export function useSearch(): UseSearchReturn {
             }
           }
         );
-        
-        // Fallback: Poll for status if SSE doesn't work (after 30 seconds)
-        let fallbackTimeout: NodeJS.Timeout | null = null;
-        fallbackTimeout = setTimeout(async () => {
-          console.log('SSE fallback: Polling for status');
-          try {
-            const statusResponse = await getSearchStatus(response.searchId);
-            // Only process if search is still in progress (SSE might have failed silently)
-            if (statusResponse.status === 'completed' || statusResponse.status === 'failed') {
-              eventSource.close();
-              if (statusResponse.status === 'completed') {
-                const resultsResponse = await getSearchResults(response.searchId);
-                if (resultsResponse.results && resultsResponse.results.length > 0) {
-                  setResults(resultsResponse.results);
-                  setStatus('completed');
-                } else {
-                  setResults([]);
-                  setStatus('completed');
-                }
-              } else {
-                setStatus('error');
-                setErrorMessage('Search failed');
-              }
-              setIsSearching(false);
-            }
-          } catch (error) {
-            console.error('Fallback polling error:', error);
-          }
-        }, 30000);
-        
-        // Clear fallback when search completes
-        const originalClose = eventSource.close;
-        eventSource.close = function() {
-          if (fallbackTimeout) {
-            clearTimeout(fallbackTimeout);
-          }
-          originalClose.call(this);
-        };
       } catch (error) {
-        console.error('Search error:', error);
+        console.error('Fetch error:', error);
         setIsSearching(false);
         setStatus('error');
         setErrorMessage(
@@ -152,7 +182,7 @@ export function useSearch(): UseSearchReturn {
         );
       }
     },
-    [setIsSearching, reset, setStatus, setErrorMessage, setSearchId, setResults]
+    [setIsSearching, reset, setStatus, setErrorMessage, setSearchId, setResults, setJobs]
   );
 
   return {
@@ -161,7 +191,10 @@ export function useSearch(): UseSearchReturn {
     status,
     errorMessage,
     isSearching,
+    jobs,
+    handleFetch,
     handleSearch,
+    updateJobs: setJobs,
   };
 }
 

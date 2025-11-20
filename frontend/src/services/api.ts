@@ -9,6 +9,10 @@ export interface SearchResponse {
     [source: string]: {
       jobId: string;
       status: string;
+      searchId: string;
+      resultCount?: number;
+      lastFetchedAt?: string;
+      completedAt?: string;
     };
   };
   results?: SearchResult[];
@@ -36,12 +40,41 @@ export interface SearchResults {
   }>;
 }
 
-export async function submitSearch(request: {
+export async function fetchFlights(request: {
   origin: string;
   destination: string;
   departureDate: string;
   returnDate?: string;
 }): Promise<SearchResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/fetch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Failed to fetch flights: ${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error(`Cannot connect to backend at ${API_BASE_URL}. Is the server running?`);
+    }
+    throw error;
+  }
+}
+
+export async function searchFlights(request: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+}): Promise<{ searchId: string; results: SearchResult[] }> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/search`, {
       method: 'POST',
@@ -53,7 +86,7 @@ export async function submitSearch(request: {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || `Failed to submit search: ${response.status} ${response.statusText}`);
+      throw new Error(errorData.error || `Failed to search flights: ${response.status} ${response.statusText}`);
     }
 
     return response.json();
@@ -86,11 +119,25 @@ export async function getSearchResults(searchId: string): Promise<SearchResults>
 }
 
 export function createSSEStream(
-  searchId: string,
+  request: {
+    origin: string;
+    destination: string;
+    departureDate: string;
+    returnDate?: string;
+  },
   onMessage: (data: SearchStatus) => void,
   onError: (error: Error) => void
 ): EventSource {
-  const eventSource = new EventSource(`${API_BASE_URL}/api/search/${searchId}/stream`);
+  const params = new URLSearchParams({
+    origin: request.origin,
+    destination: request.destination,
+    departureDate: request.departureDate,
+  });
+  if (request.returnDate) {
+    params.append('returnDate', request.returnDate);
+  }
+  
+  const eventSource = new EventSource(`${API_BASE_URL}/api/fetch/stream?${params.toString()}`);
 
   eventSource.onmessage = (event) => {
     try {
@@ -120,6 +167,75 @@ export async function clearAllData(): Promise<{ success: boolean; deleted: numbe
 
   if (!response.ok) {
     throw new Error('Failed to clear data');
+  }
+
+  return response.json();
+}
+
+export async function fetchSource(source: string, request: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+}): Promise<{ searchId: string; status: string; job: { jobId: string; status: string; searchId?: string } }> {
+  const response = await fetch(`${API_BASE_URL}/api/fetch/source/${source}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `Failed to fetch ${source}: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getFetchStatus(request: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+}): Promise<SearchStatus> {
+  const response = await fetch(`${API_BASE_URL}/api/fetch/status`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to get fetch status');
+  }
+
+  return response.json();
+}
+
+export async function cancelFetch(sourceSearchId: string): Promise<{ success: boolean; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/fetch/${sourceSearchId}/cancel`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || 'Failed to cancel fetch');
+  }
+
+  return response.json();
+}
+
+export async function retryFetch(sourceSearchId: string): Promise<{ success: boolean; jobId: string; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/fetch/${sourceSearchId}/retry`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || 'Failed to retry fetch');
   }
 
   return response.json();

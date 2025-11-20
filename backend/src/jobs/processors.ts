@@ -12,6 +12,7 @@ import {
   storeSearchTrips,
 } from '../utils/redis';
 import { generateFlightId, generateTripId, generateDealId, generateLegId } from '../utils/ids';
+import { fetchSkyscanner, db } from '../utils/skyscanner-scraper';
 
 interface FlightData {
   flightNumber: string;
@@ -34,143 +35,146 @@ interface DealData {
   isRound: boolean;
 }
 
-// Mock API clients - replace with actual API implementations
+// Helper function to parse duration string (e.g., "3h 30m" or "195m") to minutes
+function parseDurationToMinutes(durationStr: string | null | undefined): number {
+  if (!durationStr) return 0;
+  
+  const cleaned = durationStr.trim();
+  
+  // Try to match patterns like "3h 30m", "2h", "45m", etc.
+  const hourMatch = cleaned.match(/(\d+)\s*h/i);
+  const minuteMatch = cleaned.match(/(\d+)\s*m/i);
+  
+  const hours = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+  const minutes = minuteMatch ? parseInt(minuteMatch[1], 10) : 0;
+  
+  return hours * 60 + minutes;
+}
+
+// Helper function to convert scraper Flight format to FlightData format
+function convertScraperFlightToFlightData(scraperFlight: any, request: { departureDate: string; returnDate?: string }): FlightData {
+  return {
+    flightNumber: scraperFlight.flightNumber || '',
+    airline: scraperFlight.airline?.name || '',
+    origin: scraperFlight.origin?.code || '',
+    destination: scraperFlight.destination?.code || '',
+    departureDate: scraperFlight.departure?.date || request.departureDate,
+    departureTime: scraperFlight.departure?.time || '',
+    arrivalDate: scraperFlight.arrival?.date || scraperFlight.departure?.date || request.departureDate,
+    arrivalTime: scraperFlight.arrival?.time || '',
+    duration: parseDurationToMinutes(scraperFlight.duration),
+  };
+}
+
+// Skyscanner API client using the scraper
 async function fetchSkyscannerFlights(request: {
   origin: string;
   destination: string;
   departureDate: string;
   returnDate?: string;
 }): Promise<DealData[]> {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 2000 + Math.random() * 3000));
-  
-  // Mock data with various trip configurations
-  return [
-    {
-      provider: 'Expedia',
-      price: 450.99,
-      link: 'https://skyscanner.com/deal/1',
-      flights: [
-        {
-          flightNumber: 'AA123',
-          airline: 'American Airlines',
-          origin: request.origin,
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '14:30',
-          arrivalDate: request.departureDate,
-          arrivalTime: '17:45',
-          duration: 195,
-        },
-      ],
-      stopCount: 0,
-      isRound: !!request.returnDate,
-    },
-    {
-      provider: 'Kayak',
-      price: 520.50,
-      link: 'https://skyscanner.com/deal/2',
-      flights: [
-        {
-          flightNumber: 'DL456',
-          airline: 'Delta',
-          origin: request.origin,
-          destination: 'JFK',
-          departureDate: request.departureDate,
-          departureTime: '10:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '13:15',
-          duration: 195,
-        },
-        {
-          flightNumber: 'DL789',
-          airline: 'Delta',
-          origin: 'JFK',
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '15:30',
-          arrivalDate: request.departureDate,
-          arrivalTime: '18:00',
-          duration: 150,
-        },
-      ],
-      stopCount: 1,
-      isRound: !!request.returnDate,
-    },
-    {
-      provider: 'CheapOair',
-      price: 380.75,
-      link: 'https://skyscanner.com/deal/3',
-      flights: [
-        {
-          flightNumber: 'UA201',
-          airline: 'United Airlines',
-          origin: request.origin,
-          destination: 'ORD',
-          departureDate: request.departureDate,
-          departureTime: '06:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '09:30',
-          duration: 210,
-        },
-        {
-          flightNumber: 'UA302',
-          airline: 'United Airlines',
-          origin: 'ORD',
-          destination: 'ATL',
-          departureDate: request.departureDate,
-          departureTime: '11:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '13:45',
-          duration: 165,
-        },
-        {
-          flightNumber: 'UA403',
-          airline: 'United Airlines',
-          origin: 'ATL',
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '15:30',
-          arrivalDate: request.departureDate,
-          arrivalTime: '17:20',
-          duration: 110,
-        },
-      ],
-      stopCount: 2,
-      isRound: !!request.returnDate,
-    },
-    {
-      provider: 'Priceline',
-      price: 495.25,
-      link: 'https://skyscanner.com/deal/4',
-      flights: [
-        {
-          flightNumber: 'SW501',
-          airline: 'Southwest',
-          origin: request.origin,
-          destination: 'DEN',
-          departureDate: request.departureDate,
-          departureTime: '08:15',
-          arrivalDate: request.departureDate,
-          arrivalTime: '11:45',
-          duration: 210,
-        },
-        {
-          flightNumber: 'SW602',
-          airline: 'Southwest',
-          origin: 'DEN',
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '13:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '15:30',
-          duration: 150,
-        },
-      ],
-      stopCount: 1,
-      isRound: !!request.returnDate,
-    },
-  ];
+  try {
+    console.log('[Skyscanner] Starting fetch with params:', request);
+    
+    // Clear the scraper's in-memory DB before fetching new data
+    db.clear();
+    console.log('[Skyscanner] Cleared in-memory DB');
+    
+    // Prepare search parameters for the scraper
+    const searchParams = {
+      originplace: request.origin,
+      destinationplace: request.destination,
+      outbounddate: request.departureDate,
+      inbounddate: request.returnDate || '',
+    };
+    
+    console.log('[Skyscanner] Calling fetchSkyscanner with params:', searchParams);
+    
+    // Fetch flights from Skyscanner
+    const result = await fetchSkyscanner(searchParams);
+    
+    console.log('[Skyscanner] fetchSkyscanner result:', {
+      success: result.success,
+      error: result.error,
+      flightsCount: result.flights?.length || 0,
+    });
+    
+    if (!result.success) {
+      console.error('[Skyscanner] Fetch failed:', result.error);
+      return [];
+    }
+    
+    // Get all trips with their deals from the scraper's DB
+    const tripsWithDeals = db.getAllTripsWithDeals();
+    console.log('[Skyscanner] Found trips with deals:', tripsWithDeals.length);
+    
+    if (tripsWithDeals.length === 0) {
+      console.warn('[Skyscanner] No trips found in DB after fetch. This might indicate the scraper found no flights or extraction failed.');
+      return [];
+    }
+    
+    // Convert scraper format to DealData format
+    const deals: DealData[] = [];
+    
+    for (const { trip, deals: scraperDeals } of tripsWithDeals) {
+      console.log(`[Skyscanner] Processing trip ${trip.id} with ${scraperDeals.length} deals`);
+      // Get all flights for this trip from the scraper's DB
+      const allFlights = db.getAllFlights();
+      const tripFlightIds = new Set([
+        ...trip.outboundLegs.map(leg => leg.flight),
+        ...trip.inboundLegs.map(leg => leg.flight),
+      ]);
+      
+      const tripFlights = allFlights.filter(flight => tripFlightIds.has(flight.id));
+      
+      // Sort flights by order (outbound first, then inbound)
+      const outboundFlights = trip.outboundLegs
+        .map(leg => tripFlights.find(f => f.id === leg.flight))
+        .filter((f): f is any => f !== undefined);
+      
+      const inboundFlights = trip.inboundLegs
+        .map(leg => tripFlights.find(f => f.id === leg.flight))
+        .filter((f): f is any => f !== undefined);
+      
+      // Convert each deal to DealData format
+      for (const scraperDeal of scraperDeals) {
+        // Combine outbound and inbound flights
+        const allTripFlights = [...outboundFlights, ...inboundFlights];
+        
+        // Convert scraper flights to FlightData format
+        const flightData: FlightData[] = allTripFlights.map(flight => 
+          convertScraperFlightToFlightData(flight, request)
+        );
+        
+        // Parse price (remove commas and convert to number)
+        const priceStr = scraperDeal.price.replace(/,/g, '');
+        const price = parseFloat(priceStr) || 0;
+        
+        // Calculate stop count (number of legs - 1 for outbound, same for inbound if round trip)
+        const outboundStopCount = Math.max(0, trip.outboundLegs.length - 1);
+        const inboundStopCount = trip.inboundLegs.length > 0 ? Math.max(0, trip.inboundLegs.length - 1) : 0;
+        const totalStopCount = outboundStopCount + inboundStopCount;
+        
+        deals.push({
+          provider: scraperDeal.provider,
+          price: price,
+          link: scraperDeal.link || '',
+          flights: flightData,
+          stopCount: totalStopCount,
+          isRound: trip.inboundLegs.length > 0,
+        });
+      }
+    }
+    
+    console.log(`[Skyscanner] Successfully converted ${deals.length} deals`);
+    return deals;
+  } catch (error) {
+    console.error('[Skyscanner] Error fetching flights:', error);
+    if (error instanceof Error) {
+      console.error('[Skyscanner] Error stack:', error.stack);
+    }
+    return [];
+  }
 }
 
 async function fetchKiwiFlights(request: {
@@ -280,14 +284,17 @@ async function fetchKiwiFlights(request: {
   ];
 }
 
-export async function processFlightJob(job: Job<FlightJobData>): Promise<void> {
+export async function processFlightJob(job: Job<FlightJobData>): Promise<number> {
   const { searchId, source, request } = job.data;
+  
+  console.log(`[processFlightJob] Processing job for source: ${source}, searchId: ${searchId}`);
   
   try {
     let deals: DealData[];
     
     switch (source) {
       case 'skyscanner':
+        console.log('[processFlightJob] Using REAL Skyscanner scraper (not mock)');
         deals = await fetchSkyscannerFlights(request);
         break;
       case 'kiwi':
@@ -412,6 +419,7 @@ export async function processFlightJob(job: Job<FlightJobData>): Promise<void> {
     }
     
     console.log(`Processed ${deals.length} deals from ${source} for search ${searchId}`);
+    return deals.length;
   } catch (error) {
     console.error(`Error processing flight job for ${source}:`, error);
     throw error;

@@ -1,39 +1,97 @@
+import { useState, useEffect, useRef } from 'react';
+import { useSearch } from '@tanstack/react-router';
 import { FlightResults } from './components/flights';
 import { CompactHeader } from './components/CompactHeader';
-import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorMessage } from './components/ErrorMessage';
-import { useSearch } from './hooks/useSearch';
+import { useSearch as useSearchHook } from './hooks/useSearch';
+import { SearchRequest } from './types';
 
 function App() {
-  const { results, status, errorMessage, isSearching, handleSearch } = useSearch();
+  const searchParams = useSearch({ from: '/' });
+  const { searchId, results, status, errorMessage, isSearching, jobs, handleSearch, updateJobs } = useSearchHook();
+  const [currentSearchRequest, setCurrentSearchRequest] = useState<SearchRequest | undefined>();
+  const lastSearchRef = useRef<string>('');
+
+  // Validate search params
+  const isValidSearchParams = (): boolean => {
+    return !!(
+      searchParams.origin &&
+      searchParams.destination &&
+      searchParams.departureDate &&
+      searchParams.origin.length === 3 &&
+      searchParams.destination.length === 3
+    );
+  };
+
+  // Trigger search (only query DB, don't fetch) when valid params are present
+  useEffect(() => {
+    if (isValidSearchParams()) {
+      const request: SearchRequest = {
+        origin: searchParams.origin.toUpperCase(),
+        destination: searchParams.destination.toUpperCase(),
+        departureDate: searchParams.departureDate,
+        returnDate: searchParams.returnDate || undefined,
+      };
+      
+      // Create a unique key for this search to avoid duplicate searches
+      const searchKey = `${request.origin}-${request.destination}-${request.departureDate}-${request.returnDate || ''}`;
+      
+      // Only trigger if params actually changed
+      if (lastSearchRef.current !== searchKey) {
+        lastSearchRef.current = searchKey;
+        setCurrentSearchRequest(request);
+        handleSearch(request);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.origin, searchParams.destination, searchParams.departureDate, searchParams.returnDate]);
+
+  const handleJobUpdate = (updatedJobs?: { [source: string]: any }) => {
+    // Update jobs state when individual source fetches complete
+    if (updatedJobs) {
+      updateJobs(updatedJobs);
+    }
+  };
+
+  // Check if any source has ever been fetched
+  const hasAnySourceBeenFetched = Object.values(jobs).some(
+    (job) => job && job.lastFetchedAt
+  );
 
   return (
     <div className="min-h-screen bg-background">
-      <CompactHeader onSubmit={handleSearch} isLoading={isSearching} />
-
-      {status === 'processing' && (
-        <div className="container mx-auto px-4 py-8">
-          <LoadingSpinner message="Searching for flights... This may take a few moments." />
-        </div>
-      )}
+      <CompactHeader 
+        isLoading={isSearching} 
+        jobs={jobs} 
+        searchRequest={currentSearchRequest}
+        onJobUpdate={handleJobUpdate}
+        onResultsRefresh={() => {
+          if (currentSearchRequest) {
+            handleSearch(currentSearchRequest);
+          }
+        }}
+      />
 
       {status === 'completed' && results.length === 0 && (
         <div className="container mx-auto px-4 py-8">
           <ErrorMessage
-            title="No flights found"
-            message="We couldn't find any flights matching your search criteria. Please try different dates or destinations."
+            title={hasAnySourceBeenFetched ? "No flights found" : "Not yet fetched"}
+            message={hasAnySourceBeenFetched 
+              ? "We couldn't find any flights matching your search criteria. Please try different dates or destinations."
+              : "No flights have been fetched yet. Click the Fetch button for each source to start searching for flights."
+            }
           />
         </div>
       )}
 
       {results.length > 0 && (
-        <FlightResults results={results} isLoading={isSearching} />
+        <FlightResults results={results} />
       )}
 
       {status === 'error' && (
         <div className="container mx-auto px-4 py-8">
           <ErrorMessage
-            title="An error occurred while searching"
+            title="An error occurred while fetching"
             message={errorMessage || 'An unknown error occurred'}
           />
         </div>

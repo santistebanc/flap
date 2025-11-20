@@ -33,6 +33,24 @@ export function generateSearchId(request: {
   return crypto.createHash('sha256').update(searchKey).digest('hex');
 }
 
+export function generateSourceSearchId(source: string, request: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string;
+}): string {
+  const parts = [
+    source,
+    request.origin,
+    request.destination,
+    request.departureDate,
+    request.returnDate || 'oneway',
+  ];
+  const searchKey = parts.join('|');
+  // Hash the search key to create a consistent source-specific searchId
+  return crypto.createHash('sha256').update(searchKey).digest('hex');
+}
+
 export function generateTripId(flightIds: string[]): string {
   const sortedIds = [...flightIds].sort().join('|');
   return crypto.createHash('sha256').update(sortedIds).digest('hex');
