@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
@@ -88,6 +88,27 @@ export function TripEntry({ tripId, deals, flights }: TripEntryProps) {
 
   const outboundDetails = formatFlightDetails(outboundFlights);
   const inboundDetails = formatFlightDetails(inboundFlights);
+
+  // Format relative datetime for last update
+  const formatRelativeTime = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.round((now.getTime() - date.getTime()) / 1000);
+    const minutes = Math.round(seconds / 60);
+    const hours = Math.round(minutes / 60);
+    const days = Math.round(hours / 24);
+    const weeks = Math.round(days / 7);
+    const months = Math.round(days / 30);
+    const years = Math.round(days / 365);
+
+    if (seconds < 60) return 'just now';
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    if (weeks < 4) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+    if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+    return `${years} year${years === 1 ? '' : 's'} ago`;
+  }, []);
 
   return (
     <>
@@ -198,94 +219,30 @@ export function TripEntry({ tripId, deals, flights }: TripEntryProps) {
           </DialogHeader>
           <div className="space-y-4">
             {sortedDeals.map((deal) => {
-              // All deals share the same flights for this trip
-              const dealOutboundDetails = formatFlightDetails(outboundFlights);
-              const dealInboundDetails = formatFlightDetails(inboundFlights);
-
               return (
                 <Card key={deal.id}>
                   <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold">{deal.provider}</div>
-                          <div className="text-sm text-muted-foreground">via {deal.source}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xl font-bold">{formatPrice(deal.price)}</div>
-                          <Button
-                            asChild
-                            variant="outline"
-                            size="sm"
-                            className="mt-2"
-                          >
-                            <a href={deal.link} target="_blank" rel="noopener noreferrer">
-                              Book
-                            </a>
-                          </Button>
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-semibold">{deal.provider}</div>
+                        <div className="text-sm text-muted-foreground">via {deal.source}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          <span>Updated {formatRelativeTime(deal.updated_at)}</span>
                         </div>
                       </div>
-
-                      {/* Outbound flights */}
-                      {dealOutboundDetails.length > 0 && (
-                        <div className="space-y-2 pt-2 border-t">
-                          <div className="text-xs font-semibold text-muted-foreground uppercase">Outbound</div>
-                          {dealOutboundDetails.map(({ flight, connectionTime, isLast }, idx) => (
-                            <div key={flight.id} className="space-y-1">
-                              <div className="flex items-center gap-2 text-sm">
-                                <Plane className="h-3 w-3 text-muted-foreground" />
-                                <span className="font-medium">{flight.flight_number}</span>
-                                <span className="text-muted-foreground text-xs">{flight.airline}</span>
-                                <span className="text-muted-foreground">•</span>
-                                <span className="text-xs">{formatDuration(flight.duration)}</span>
-                              </div>
-                              <div className="text-xs text-muted-foreground pl-5">
-                                {flight.origin} {formatTime(flight.departure_time)} → {flight.destination} {formatTime(flight.arrival_time)}
-                              </div>
-                              {connectionTime !== null && !isLast && (
-                                <div className="text-xs text-muted-foreground pl-5 italic">
-                                  {formatDuration(connectionTime)} layover in {flight.destination}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Inbound flights */}
-                      {dealInboundDetails.length > 0 && (
-                        <div className="space-y-2 pt-2 border-t">
-                          <div className="text-xs font-semibold text-muted-foreground uppercase">Return</div>
-                          {dealInboundDetails.map(({ flight, connectionTime, isLast }, idx) => (
-                            <div key={flight.id} className="space-y-1">
-                              <div className="flex items-center gap-2 text-sm">
-                                <Plane className="h-3 w-3 text-muted-foreground" />
-                                <span className="font-medium">{flight.flight_number}</span>
-                                <span className="text-muted-foreground text-xs">{flight.airline}</span>
-                                <span className="text-muted-foreground">•</span>
-                                <span className="text-xs">{formatDuration(flight.duration)}</span>
-                              </div>
-                              <div className="text-xs text-muted-foreground pl-5">
-                                {flight.origin} {formatTime(flight.departure_time)} → {flight.destination} {formatTime(flight.arrival_time)}
-                              </div>
-                              {connectionTime !== null && !isLast && (
-                                <div className="text-xs text-muted-foreground pl-5 italic">
-                                  {formatDuration(connectionTime)} layover in {flight.destination}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 pt-2 border-t text-xs text-muted-foreground">
-                        <span>Total: {formatDuration(deal.duration)}</span>
-                        {deal.stop_count > 0 && (
-                          <>
-                            <span>•</span>
-                            <span>{deal.stop_count} stop{deal.stop_count !== 1 ? 's' : ''}</span>
-                          </>
-                        )}
+                      <div className="text-right">
+                        <div className="text-xl font-bold">{formatPrice(deal.price)}</div>
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                        >
+                          <a href={deal.link} target="_blank" rel="noopener noreferrer">
+                            Book
+                          </a>
+                        </Button>
                       </div>
                     </div>
                   </CardContent>

@@ -13,6 +13,7 @@ import {
 } from '../utils/redis';
 import { generateFlightId, generateTripId, generateDealId, generateLegId } from '../utils/ids';
 import { fetchSkyscanner, db } from '../utils/skyscanner-scraper';
+import { fetchKiwi, db as kiwiDb } from '../utils/kiwi-scraper';
 
 interface FlightData {
   flightNumber: string;
@@ -177,111 +178,112 @@ async function fetchSkyscannerFlights(request: {
   }
 }
 
+// Helper function to convert YYYY-MM-DD to DD/MM/YYYY for Kiwi
+function convertDateToKiwiFormat(dateStr: string): string {
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+}
+
 async function fetchKiwiFlights(request: {
   origin: string;
   destination: string;
   departureDate: string;
   returnDate?: string;
 }): Promise<DealData[]> {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 2500));
-  
-  // Mock data with multi-leg trips
-  return [
-    {
-      provider: 'Kiwi Direct',
-      price: 380.00,
-      link: 'https://kiwi.com/deal/1',
-      flights: [
-        {
-          flightNumber: 'UA321',
-          airline: 'United Airlines',
-          origin: request.origin,
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '08:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '11:20',
-          duration: 200,
-        },
-      ],
-      stopCount: 0,
-      isRound: !!request.returnDate,
-    },
-    {
-      provider: 'Kiwi Multi-Stop',
-      price: 340.50,
-      link: 'https://kiwi.com/deal/2',
-      flights: [
-        {
-          flightNumber: 'B6101',
-          airline: 'JetBlue',
-          origin: request.origin,
-          destination: 'BOS',
-          departureDate: request.departureDate,
-          departureTime: '07:30',
-          arrivalDate: request.departureDate,
-          arrivalTime: '10:15',
-          duration: 165,
-        },
-        {
-          flightNumber: 'B6102',
-          airline: 'JetBlue',
-          origin: 'BOS',
-          destination: 'MIA',
-          departureDate: request.departureDate,
-          departureTime: '12:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '15:20',
-          duration: 200,
-        },
-        {
-          flightNumber: 'B6103',
-          airline: 'JetBlue',
-          origin: 'MIA',
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '17:00',
-          arrivalDate: request.departureDate,
-          arrivalTime: '19:30',
-          duration: 150,
-        },
-      ],
-      stopCount: 2,
-      isRound: !!request.returnDate,
-    },
-    {
-      provider: 'Kiwi Budget',
-      price: 315.00,
-      link: 'https://kiwi.com/deal/3',
-      flights: [
-        {
-          flightNumber: 'FR701',
-          airline: 'Frontier',
-          origin: request.origin,
-          destination: 'LAS',
-          departureDate: request.departureDate,
-          departureTime: '09:45',
-          arrivalDate: request.departureDate,
-          arrivalTime: '12:30',
-          duration: 165,
-        },
-        {
-          flightNumber: 'FR702',
-          airline: 'Frontier',
-          origin: 'LAS',
-          destination: request.destination,
-          departureDate: request.departureDate,
-          departureTime: '14:15',
-          arrivalDate: request.departureDate,
-          arrivalTime: '16:45',
-          duration: 150,
-        },
-      ],
-      stopCount: 1,
-      isRound: !!request.returnDate,
-    },
-  ];
+        try {
+            // Clear the Kiwi scraper's in-memory DB before fetching new data
+            kiwiDb.clear();
+
+            // Prepare search parameters for the Kiwi scraper (dates in DD/MM/YYYY format)
+            const searchParams = {
+                originplace: request.origin,
+                destinationplace: request.destination,
+                outbounddate: convertDateToKiwiFormat(request.departureDate),
+                inbounddate: request.returnDate ? convertDateToKiwiFormat(request.returnDate) : '',
+            };
+
+            // Fetch flights from Kiwi
+            const result = await fetchKiwi(searchParams);
+
+            if (!result.success) {
+                console.error('[Kiwi] Fetch failed:', result.error);
+                return [];
+            }
+
+            // Get all trips with their deals from the Kiwi scraper's DB
+            const tripsWithDeals = kiwiDb.getAllTripsWithDeals();
+    
+    if (tripsWithDeals.length === 0) {
+      console.warn('[Kiwi] No trips found in DB after fetch.');
+      return [];
+    }
+    
+    // Convert scraper format to DealData format
+    const deals: DealData[] = [];
+    
+    for (const { trip, deals: scraperDeals } of tripsWithDeals) {
+      // Get all flights for this trip
+      const tripFlights: FlightData[] = [];
+      
+      // Process outbound legs
+      for (const leg of trip.outboundLegs) {
+        const flight = kiwiDb.flights.get(leg.flight);
+        if (flight) {
+          tripFlights.push({
+            flightNumber: flight.flightNumber,
+            airline: flight.airline.name,
+            origin: flight.origin.code,
+            destination: flight.destination.code,
+            departureDate: flight.departure.date,
+            departureTime: flight.departure.time,
+            arrivalDate: flight.arrival.date,
+            arrivalTime: flight.arrival.time,
+            duration: parseDurationToMinutes(flight.duration),
+          });
+        }
+      }
+      
+      // Process inbound legs (if round trip)
+      if (trip.inboundLegs.length > 0) {
+        for (const leg of trip.inboundLegs) {
+          const flight = kiwiDb.flights.get(leg.flight);
+          if (flight) {
+            tripFlights.push({
+              flightNumber: flight.flightNumber,
+              airline: flight.airline.name,
+              origin: flight.origin.code,
+              destination: flight.destination.code,
+              departureDate: flight.departure.date,
+              departureTime: flight.departure.time,
+              arrivalDate: flight.arrival.date,
+              arrivalTime: flight.arrival.time,
+              duration: parseDurationToMinutes(flight.duration),
+            });
+          }
+        }
+      }
+      
+      // Create a DealData entry for each scraper deal
+      for (const scraperDeal of scraperDeals) {
+        deals.push({
+          provider: scraperDeal.provider || 'kiwi',
+          price: parseFloat(scraperDeal.price) || 0,
+          link: scraperDeal.link || '',
+          flights: tripFlights,
+          stopCount: trip.stopCount,
+          isRound: trip.inboundLegs.length > 0,
+        });
+      }
+    }
+    
+            return deals;
+  } catch (error) {
+    console.error('[Kiwi] Error in fetchKiwiFlights:', error);
+    return [];
+  }
 }
 
 export async function processFlightJob(job: Job<FlightJobData>): Promise<number> {

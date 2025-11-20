@@ -181,12 +181,30 @@ export function JobStatusIndicator({ jobs, searchRequest, onJobUpdate, onResults
   };
 
   const handleCancel = async (source: string, sourceSearchId?: string) => {
-    if (!sourceSearchId) return;
+    if (!sourceSearchId || !searchRequest) return;
     
     setCancelling(source);
     try {
       await cancelFetch(sourceSearchId);
-      onJobUpdate?.();
+      
+      // Refresh all job statuses to get the updated status
+      try {
+        const statusResponse = await getFetchStatus(searchRequest);
+        if (statusResponse.jobs && onJobUpdate) {
+          onJobUpdate(statusResponse.jobs as { [source: string]: JobStatus });
+        }
+      } catch (error) {
+        console.warn('Failed to refresh job statuses after cancel:', error);
+        // Still update with what we know - the job was cancelled
+        if (onJobUpdate) {
+          const updatedJobs = { ...jobs };
+          updatedJobs[source] = {
+            ...jobs[source],
+            status: 'failed' as const,
+          };
+          onJobUpdate(updatedJobs);
+        }
+      }
     } catch (error) {
       alert(`Failed to cancel fetch: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
@@ -195,12 +213,31 @@ export function JobStatusIndicator({ jobs, searchRequest, onJobUpdate, onResults
   };
 
   const handleRetry = async (source: string, sourceSearchId?: string) => {
-    if (!sourceSearchId) return;
+    if (!sourceSearchId || !searchRequest) return;
     
     setRetrying(source);
     try {
       await retryFetch(sourceSearchId);
-      onJobUpdate?.();
+      
+      // Refresh all job statuses to get the updated status
+      try {
+        const statusResponse = await getFetchStatus(searchRequest);
+        if (statusResponse.jobs && onJobUpdate) {
+          onJobUpdate(statusResponse.jobs as { [source: string]: JobStatus });
+        }
+      } catch (error) {
+        console.warn('Failed to refresh job statuses after retry:', error);
+        // Still update with what we know - the job was retried
+        if (onJobUpdate) {
+          const updatedJobs = { ...jobs };
+          updatedJobs[source] = {
+            ...jobs[source],
+            status: 'pending' as const,
+            jobId: jobs[source]?.jobId || '',
+          };
+          onJobUpdate(updatedJobs);
+        }
+      }
     } catch (error) {
       alert(`Failed to retry fetch: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
