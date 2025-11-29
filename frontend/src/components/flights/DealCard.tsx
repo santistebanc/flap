@@ -44,13 +44,6 @@ export function DealCard({ deal, flights }: DealCardProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>Duration: {formatDuration(deal.duration)}</span>
-            <span className="mx-2">•</span>
-            <span>Stops: {deal.stop_count}</span>
-          </div>
-
           <FlightList flights={outboundFlights} />
 
           {deal.is_round && returnFlights.length > 0 && (

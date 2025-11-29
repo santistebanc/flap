@@ -4,35 +4,21 @@ import { FlightResults } from './components/flights';
 import { CompactHeader } from './components/CompactHeader';
 import { ErrorMessage } from './components/ErrorMessage';
 import { useSearch as useSearchHook } from './hooks/useSearch';
-import { SearchRequest } from './types';
+import { validateSearchRequest } from './schemas/searchParams';
+import type { SearchRequest } from './types';
 
 function App() {
   const searchParams = useSearch({ from: '/' });
-  const { searchId, results, status, errorMessage, isSearching, jobs, handleSearch, updateJobs } = useSearchHook();
+  const { results, status, errorMessage, isSearching, jobs, handleSearch, updateJobs } = useSearchHook();
   const [currentSearchRequest, setCurrentSearchRequest] = useState<SearchRequest | undefined>();
   const lastSearchRef = useRef<string>('');
 
-  // Validate search params
-  const isValidSearchParams = (): boolean => {
-    return !!(
-      searchParams.origin &&
-      searchParams.destination &&
-      searchParams.departureDate &&
-      searchParams.origin.length === 3 &&
-      searchParams.destination.length === 3
-    );
-  };
-
   // Trigger search (only query DB, don't fetch) when valid params are present
   useEffect(() => {
-    if (isValidSearchParams()) {
-      const request: SearchRequest = {
-        origin: searchParams.origin.toUpperCase(),
-        destination: searchParams.destination.toUpperCase(),
-        departureDate: searchParams.departureDate,
-        returnDate: searchParams.returnDate || undefined,
-      };
-      
+    // Validate search params using Zod schema
+    const request = validateSearchRequest(searchParams);
+    
+    if (request) {
       // Create a unique key for this search to avoid duplicate searches
       const searchKey = `${request.origin}-${request.destination}-${request.departureDate}-${request.returnDate || ''}`;
       
@@ -44,7 +30,7 @@ function App() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.origin, searchParams.destination, searchParams.departureDate, searchParams.returnDate]);
+  }, [searchParams.origin, searchParams.destination, searchParams.departureDate, searchParams.returnDate, searchParams.roundTrip]);
 
   const handleJobUpdate = (updatedJobs?: { [source: string]: any }) => {
     // Update jobs state when individual source fetches complete

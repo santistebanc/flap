@@ -6,8 +6,6 @@ export interface Deal {
   trip: string; // Foreign key → trips.id
   origin: string;
   destination: string;
-  stop_count: number;
-  duration: number;
   is_round: boolean;
   departure_date: string; // ISO date string (YYYY-MM-DD)
   departure_time: string; // Time string (HH:MM)
@@ -42,7 +40,7 @@ export interface Flight {
  * Legs table - Represents a leg of a trip (connection between flights)
  */
 export interface Leg {
-  id: string; // Generated as: `outbound_${flightId}_${tripId}` or `inbound_${flightId}_${tripId}`
+  id: string; // Generated as: `${tripId}_outbound_${flightId}` or `${tripId}_inbound_${flightId}`
   trip: string; // Foreign key → trips.id
   flight: string; // Foreign key → flights.id
   inbound: boolean;

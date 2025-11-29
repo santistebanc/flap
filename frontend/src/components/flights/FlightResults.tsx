@@ -11,7 +11,7 @@ interface FlightResultsProps {
 
 const RESULTS_PER_PAGE = 10;
 
-export function FlightResults({ results, isLoading }: FlightResultsProps) {
+export function FlightResults({ results }: FlightResultsProps) {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Reset to page 1 when results change
@@ -34,10 +34,10 @@ export function FlightResults({ results, isLoading }: FlightResultsProps) {
   // Sort results by lowest price (lowest to highest)
   const sortedResults = [...results].sort((a, b) => {
     const aLowestPrice = a.deals.length > 0 
-      ? Math.min(...a.deals.map(deal => deal.price))
+      ? Math.min(...a.deals.map(deal => parseFloat(deal.price)))
       : Infinity;
     const bLowestPrice = b.deals.length > 0
-      ? Math.min(...b.deals.map(deal => deal.price))
+      ? Math.min(...b.deals.map(deal => parseFloat(deal.price)))
       : Infinity;
     return aLowestPrice - bLowestPrice;
   });
@@ -139,9 +139,7 @@ export function FlightResults({ results, isLoading }: FlightResultsProps) {
           {paginatedResults.map((result) => (
             <TripEntry
               key={result.tripId}
-              tripId={result.tripId}
-              deals={result.deals}
-              flights={result.flights}
+              result={result}
             />
           ))}
         </div>

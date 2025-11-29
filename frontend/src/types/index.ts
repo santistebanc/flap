@@ -3,8 +3,6 @@ export interface Deal {
   trip: string;
   origin: string;
   destination: string;
-  stop_count: number;
-  duration: number;
   is_round: boolean;
   departure_date: string;
   departure_time: string;
@@ -41,16 +39,50 @@ export interface Flight {
   };
 }
 
-export interface SearchRequest {
-  origin: string;
-  destination: string;
-  departureDate: string;
-  returnDate?: string;
+// SearchRequest type is now defined in schemas/searchParams.ts using Zod
+// Re-export for backward compatibility
+export type { SearchRequest } from '../schemas/searchParams';
+
+export interface Airport {
+  code: string;
+  name: string;
+}
+
+export interface DateTime {
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+}
+
+export interface Airline {
+  name: string;
+}
+
+export interface SearchResultLeg {
+  legId: string;
+  flightId: string;
+  flightNumber: string;
+  origin: Airport;
+  destination: Airport;
+  departure: DateTime;
+  arrival: DateTime;
+  duration: string;
+  airline: Airline;
+  cabinClass: string;
+  connectionTime?: string;
 }
 
 export interface SearchResult {
   tripId: string;
-  deals: Deal[];
-  flights: Flight[];
+  origin: Airport;
+  destination: Airport;
+  outboundLegs: SearchResultLeg[];
+  inboundLegs: SearchResultLeg[];
+  deals: {
+    dealId: string;
+    price: string;
+    provider: string;
+    link?: string;
+    last_update: string;
+  }[];
 }
 

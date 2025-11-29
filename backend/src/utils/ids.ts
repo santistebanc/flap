@@ -52,7 +52,7 @@ export function generateSourceSearchId(source: string, request: {
 }
 
 export function generateTripId(flightIds: string[]): string {
-  const sortedIds = [...flightIds].sort().join('|');
+  const sortedIds = flightIds.join('|');
   return crypto.createHash('sha256').update(sortedIds).digest('hex');
 }
 
@@ -62,6 +62,6 @@ export function generateDealId(tripId: string, source: string, provider: string)
 
 export function generateLegId(tripId: string, flightId: string, inbound: boolean): string {
   const direction = inbound ? 'inbound' : 'outbound';
-  return `${direction}_${flightId}_${tripId}`;
+  return `${tripId}_${direction}_${flightId}`;
 }
 
