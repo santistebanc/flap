@@ -1,6 +1,5 @@
 import { JobStatus } from '../../hooks/useSearchState';
 import { SearchRequest } from '../../types';
-import { useJobPolling } from '../../hooks/useJobPolling';
 import { useJobActions } from '../../hooks/useJobActions';
 import { JobStatusRow } from './JobStatusRow';
 
@@ -20,14 +19,6 @@ export function JobStatusIndicator({
   onJobUpdate,
   onResultsRefresh,
 }: JobStatusIndicatorProps) {
-  // Poll for job status updates when there are active jobs
-  useJobPolling({
-    jobs,
-    searchRequest,
-    onJobUpdate,
-    onResultsRefresh,
-  });
-
   // Handle job actions (fetch)
   const { searching, handleFetch } = useJobActions({
     jobs,

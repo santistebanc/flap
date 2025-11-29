@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SearchRequest } from '../types';
-import { searchFlights, getFetchStatus } from '../services/api';
+import { searchFlights } from '../services/api';
 import { useSearchState, SearchStatus, JobStatus } from './useSearchState';
 
 interface UseSearchReturn {
@@ -45,22 +45,6 @@ export function useSearch(): UseSearchReturn {
     staleTime: 5000,
   });
 
-  // Use React Query for job status polling
-  const hasActiveJobs = Object.values(stateJobs).some(
-    (job) => job && job.jobId && (job.status === 'active' || job.status === 'pending')
-  );
-  
-  const statusQuery = useQuery({
-    queryKey: ['fetchStatus', currentSearchRequest],
-    queryFn: async () => {
-      if (!currentSearchRequest) return { jobs: {} };
-      return await getFetchStatus(currentSearchRequest);
-    },
-    enabled: hasActiveJobs && !!currentSearchRequest,
-    refetchInterval: hasActiveJobs ? 2000 : undefined,
-    staleTime: 2000,
-  });
-
   // Sync React Query results to local state
   useEffect(() => {
     if (searchQuery.data?.results) {
@@ -68,12 +52,6 @@ export function useSearch(): UseSearchReturn {
       setStatus('completed');
     }
   }, [searchQuery.data, setResults, setStatus]);
-
-  useEffect(() => {
-    if (statusQuery.data?.jobs) {
-      setJobs(statusQuery.data.jobs as { [source: string]: JobStatus });
-    }
-  }, [statusQuery.data?.jobs, setJobs]);
 
   const handleSearch = useCallback(
     async (request: SearchRequest) => {

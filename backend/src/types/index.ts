@@ -64,20 +64,3 @@ export interface SearchRequest {
   returnDate?: string;
 }
 
-export interface SearchJob {
-  searchId: string;
-  request: SearchRequest;
-  sources: string[];
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  jobs: {
-    [source: string]: {
-      jobId: string;
-      status: 'pending' | 'active' | 'completed' | 'failed';
-      completedAt?: string; // Timestamp when this source completed
-      resultCount?: number; // Number of results/deals found
-      lastFetchedAt?: string; // Timestamp when results were last fetched
-    };
-  };
-  createdAt: string;
-}
-

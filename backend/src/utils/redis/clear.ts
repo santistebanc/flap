@@ -28,7 +28,7 @@ export async function clearAllData(): Promise<{ deleted: number }> {
     'leg:*',
     'trip:*',
     'deal:*',
-    'search:*',
+    'bull:flight-search:*', // BullMQ queue keys
   ];
   
   let totalDeleted = 0;

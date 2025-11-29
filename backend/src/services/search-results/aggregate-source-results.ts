@@ -3,10 +3,11 @@
  */
 import { groupBy, flatten } from 'lodash-es';
 import { getSearchResultsData, SearchResult } from './get-search-results';
+import { SearchRequest } from '../../types';
 
 export async function aggregateSourceResults(
   sources: string[],
-  request: any
+  request: SearchRequest
 ): Promise<SearchResult[]> {
   // Fetch all results from all sources
   const allSourceResults = await Promise.all(

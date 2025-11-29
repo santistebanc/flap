@@ -28,9 +28,7 @@ export function generateSearchId(request: {
     request.departureDate,
     request.returnDate || 'oneway',
   ];
-  const searchKey = parts.join('|');
-  // Hash the search key to create a consistent searchId
-  return crypto.createHash('sha256').update(searchKey).digest('hex');
+  return parts.join('|');
 }
 
 export function generateSourceSearchId(source: string, request: {
@@ -40,15 +38,13 @@ export function generateSourceSearchId(source: string, request: {
   returnDate?: string;
 }): string {
   const parts = [
-    source,
     request.origin,
     request.destination,
     request.departureDate,
     request.returnDate || 'oneway',
+    source,
   ];
-  const searchKey = parts.join('|');
-  // Hash the search key to create a consistent source-specific searchId
-  return crypto.createHash('sha256').update(searchKey).digest('hex');
+  return parts.join('|');
 }
 
 export function generateTripId(flightIds: string[]): string {
@@ -56,8 +52,19 @@ export function generateTripId(flightIds: string[]): string {
   return crypto.createHash('sha256').update(sortedIds).digest('hex');
 }
 
-export function generateDealId(tripId: string, source: string, provider: string): string {
-  return `${tripId}_${source}_${provider}`;
+export function generateDealId(
+  source: string,
+  request: {
+    origin: string;
+    destination: string;
+    departureDate: string;
+    returnDate?: string;
+  },
+  tripId: string,
+  provider: string
+): string {
+  const searchId = generateSourceSearchId(source, request);
+  return `${searchId}_${tripId}_${provider}`;
 }
 
 export function generateLegId(tripId: string, flightId: string, inbound: boolean): string {

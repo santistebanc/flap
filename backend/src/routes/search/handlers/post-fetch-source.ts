@@ -3,7 +3,6 @@
  */
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { addFlightJob } from '../../../services/queue';
-import { storeSearchJob } from '../../../utils/redis';
 import { generateSourceSearchId } from '../../../utils/ids';
 
 export async function postFetchSource(
@@ -18,17 +17,6 @@ export async function postFetchSource(
     
     // Always create a new job when explicitly requested (user clicked fetch button)
     const jobId = await addFlightJob(sourceSearchId, source, body);
-    const sourceJob = {
-      searchId: sourceSearchId,
-      request: body,
-      source,
-      job: {
-        jobId,
-        status: 'pending',
-      },
-      createdAt: new Date().toISOString(),
-    };
-    await storeSearchJob(sourceJob);
     
     return reply.code(201).send({
       searchId: sourceSearchId,

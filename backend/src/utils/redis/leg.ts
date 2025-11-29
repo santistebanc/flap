@@ -6,7 +6,6 @@ import { Leg } from '../../types';
 
 export async function storeLeg(leg: Leg, expirationSeconds?: number): Promise<void> {
   const key = `leg:${leg.id}`;
-  const tripLegsKey = `trip:${leg.trip}:legs`;
   
   // Check if key exists and delete it if it's not a hash (to handle type conflicts)
   const type = await redis.type(key);
@@ -24,50 +23,54 @@ export async function storeLeg(leg: Leg, expirationSeconds?: number): Promise<vo
     created_at: leg.created_at,
   });
   await redis.expire(key, expirationSeconds || 86400);
-  
-  // Add to trip legs index
-  await redis.sadd(tripLegsKey, leg.id);
-  await redis.expire(tripLegsKey, expirationSeconds || 86400);
 }
 
 export async function getLegsByTrip(tripId: string): Promise<Leg[]> {
-  const tripLegsKey = `trip:${tripId}:legs`;
-  const legIds = await redis.smembers(tripLegsKey);
-  
-  if (legIds.length === 0) {
-    return [];
-  }
-  
   const legs: Leg[] = [];
+  let cursor = '0';
+  const legPattern = `leg:${tripId}_*`;
   
-  // Use pipeline for better performance
-  const pipeline = redis.pipeline();
-  for (const legId of legIds) {
-    pipeline.hgetall(`leg:${legId}`);
-  }
-  const results = await pipeline.exec();
-  
-  if (results) {
-    for (const result of results) {
-      if (!result || result[0]) {
-        continue; // Skip errors
+  // Scan leg keys that match the tripId pattern (leg IDs are: ${tripId}_${direction}_${flightId})
+  do {
+    const [nextCursor, keys] = await redis.scan(
+      cursor,
+      'MATCH',
+      legPattern,
+      'COUNT',
+      '100'
+    );
+    cursor = nextCursor;
+    
+    if (keys.length > 0) {
+      const pipeline = redis.pipeline();
+      for (const key of keys) {
+        pipeline.hgetall(key);
       }
-      const data = result[1] as Record<string, string>;
-      if (!data || Object.keys(data).length === 0) {
-        continue;
-      }
+      const results = await pipeline.exec();
       
-      legs.push({
-        id: data.id,
-        trip: data.trip,
-        flight: data.flight,
-        inbound: data.inbound === 'true',
-        order: parseInt(data.order, 10),
-        connection_time: data.connection_time && data.connection_time !== 'null' ? parseInt(data.connection_time, 10) : null,
-        created_at: data.created_at,
-      });
+      if (results) {
+        for (const result of results) {
+          if (!result || result[0]) {
+            continue; // Skip errors
+          }
+          const data = result[1] as Record<string, string>;
+          if (!data || Object.keys(data).length === 0) {
+            continue;
+          }
+          
+          legs.push({
+            id: data.id,
+            trip: data.trip,
+            flight: data.flight,
+            inbound: data.inbound === 'true',
+            order: parseInt(data.order, 10),
+            connection_time: data.connection_time && data.connection_time !== 'null' ? parseInt(data.connection_time, 10) : null,
+            created_at: data.created_at,
+          });
+        }
+      }
     }
-  }
+  } while (cursor !== '0');
   
   // Sort by order
   return legs.sort((a, b) => a.order - b.order);

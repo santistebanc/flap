@@ -34,7 +34,7 @@ export async function createDealsFromPrices(
     
     let dealsCount = 0;
     for (const priceInfo of prices) {
-        const dealId = generateDealId(tripId, source, priceInfo.provider);
+        const dealId = generateDealId(source, request, tripId, priceInfo.provider);
         const deal: Deal = {
             id: dealId,
             trip: tripId,

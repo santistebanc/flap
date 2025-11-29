@@ -2,9 +2,8 @@
  * Get search results data by querying deals that match search parameters
  * Groups deals by trip and builds complete search results
  */
-import { getTrip, getLegsByTrip } from '../../utils/redis';
-import { getFlight } from '../../utils/redis';
-import { generateLegId } from '../../utils/ids';
+import { getTrip, getLegsByTrip, getFlight } from '../../utils/redis';
+import { generateLegId, generateSourceSearchId } from '../../utils/ids';
 import redis from '../../utils/redis/client';
 import { SearchRequest, Flight } from '../../types';
 
@@ -56,18 +55,22 @@ export async function getSearchResultsData(
   source: string
 ): Promise<SearchResult[]> {
 
-  // Query all deals that match the search criteria
+  // Generate sourceSearchId to use for direct pattern matching
+  const searchId = generateSourceSearchId(source, request);
+  const dealPattern = `deal:${searchId}_*`;
+
+  // Query deals that match the searchId pattern directly
   const matchingDeals: any[] = [];
   let cursor = '0';
   let totalScanned = 0;
   let totalDeals = 0;
   
-  // Scan all deal keys
+  // Scan only deals that match the searchId pattern
   do {
     const [nextCursor, keys] = await redis.scan(
       cursor,
       'MATCH',
-      'deal:*',
+      dealPattern,
       'COUNT',
       '100'
     );
@@ -95,60 +98,31 @@ export async function getSearchResultsData(
 
           totalDeals++;
 
-          // Filter deals by search criteria
-          const dealOrigin = data.origin;
-          const dealDestination = data.destination;
-          const dealDepartureDate = data.departure_date;
-          const dealReturnDate = data.return_date || '';
-          const dealSource = data.source;
-
-          // Match origin, destination, departure date, and source
-          const matchesOrigin = dealOrigin === request.origin;
-          const matchesDestination = dealDestination === request.destination;
-          const matchesDepartureDate = dealDepartureDate === request.departureDate;
-          const matchesSource = dealSource === source;
-          // For return date: if request has returnDate, deal must match it; if request has no returnDate, deal must have no returnDate (empty string)
-          const matchesReturnDate = request.returnDate 
-            ? dealReturnDate === request.returnDate 
-            : (!dealReturnDate || dealReturnDate === '');
-
-          // Debug logging for first few deals
-          if (totalDeals <= 3) {
-            console.log(`[getSearchResultsData] Deal ${data.id}: origin=${dealOrigin} (${matchesOrigin ? '✓' : '✗'}), dest=${dealDestination} (${matchesDestination ? '✓' : '✗'}), depDate=${dealDepartureDate} (${matchesDepartureDate ? '✓' : '✗'}), retDate=${dealReturnDate} (${matchesReturnDate ? '✓' : '✗'}), source=${dealSource} (${matchesSource ? '✓' : '✗'})`);
-            console.log(`[getSearchResultsData] Request: origin=${request.origin}, dest=${request.destination}, depDate=${request.departureDate}, retDate=${request.returnDate || 'none'}, source=${source}`);
-          }
-
-          if (
-            matchesOrigin &&
-            matchesDestination &&
-            matchesDepartureDate &&
-            matchesSource &&
-            matchesReturnDate
-          ) {
-            matchingDeals.push({
-              id: data.id,
-              trip: data.trip,
-              origin: data.origin,
-              destination: data.destination,
-              is_round: data.is_round === 'true',
-              departure_date: data.departure_date,
-              departure_time: data.departure_time,
-              return_date: data.return_date || null,
-              return_time: data.return_time || null,
-              source: data.source,
-              provider: data.provider,
-              price: parseFloat(data.price),
-              link: data.link,
-              created_at: data.created_at,
-              updated_at: data.updated_at,
-            });
-          }
+          // All deals matching the pattern already match the search criteria
+          // (since searchId includes source, origin, destination, dates)
+          matchingDeals.push({
+            id: data.id,
+            trip: data.trip,
+            origin: data.origin,
+            destination: data.destination,
+            is_round: data.is_round === 'true',
+            departure_date: data.departure_date,
+            departure_time: data.departure_time,
+            return_date: data.return_date || null,
+            return_time: data.return_time || null,
+            source: data.source,
+            provider: data.provider,
+            price: parseFloat(data.price),
+            link: data.link,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+          });
         }
       }
     }
   } while (cursor !== '0');
 
-  console.log(`[getSearchResultsData] Scanned ${totalScanned} keys, found ${totalDeals} deals, matched ${matchingDeals.length} deals for source=${source}, origin=${request.origin}, destination=${request.destination}, departureDate=${request.departureDate}, returnDate=${request.returnDate || 'none'}`);
+  console.log(`[getSearchResultsData] Scanned ${totalScanned} keys with pattern ${dealPattern}, found ${totalDeals} matching deals for source=${source}, origin=${request.origin}, destination=${request.destination}, departureDate=${request.departureDate}, returnDate=${request.returnDate || 'none'}`);
 
   if (matchingDeals.length === 0) {
     return [];

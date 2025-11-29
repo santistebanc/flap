@@ -3,7 +3,6 @@
  */
 import { Job } from 'bullmq';
 import { FlightJobData } from '../../services/queue';
-import { getSearchJob, storeSearchJob } from '../../utils/redis';
 
 export function setupEventHandlers(worker: any): void {
   worker.on('ready', () => {
@@ -22,25 +21,6 @@ export function setupEventHandlers(worker: any): void {
     console.error(`❌ Job ${job?.id} failed for source ${job?.data.source}:`, err);
     console.error(`Error details:`, err.message);
     console.error(`Stack trace:`, err.stack);
-    
-    // Update source search job status
-    if (job) {
-      const { searchId, source } = job.data;
-      getSearchJob(searchId)
-        .then((sourceSearchJob) => {
-          const typedSourceSearchJob = sourceSearchJob as any;
-          if (typedSourceSearchJob && typedSourceSearchJob.job) {
-            console.log(`📝 Updating job ${job.id} (${source}) status to 'failed'`);
-            typedSourceSearchJob.job.status = 'failed';
-            return storeSearchJob(typedSourceSearchJob);
-          } else {
-            console.warn(`⚠️ Could not update failed status: source search job not found`);
-          }
-        })
-        .catch((updateError) => {
-          console.error(`❌ Error updating failed status:`, updateError);
-        });
-    }
   });
 
   worker.on('error', (err: Error) => {

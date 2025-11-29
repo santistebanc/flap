@@ -150,7 +150,15 @@ export async function extractFlightFromSearchModal(
     const departureDate = params.outbounddate ? convertKiwiDateToISO(params.outbounddate) : '';
     const returnDate = params.inbounddate ? convertKiwiDateToISO(params.inbounddate) : undefined;
     
-    const dealId = generateDealId(tripId, 'kiwi', 'kiwi');
+    // Convert SearchParams to request format for generateDealId
+    const request = {
+      origin,
+      destination,
+      departureDate,
+      returnDate,
+    };
+    
+    const dealId = generateDealId('kiwi', request, tripId, 'kiwi');
     const deal: Deal = {
         id: dealId,
         trip: tripId,

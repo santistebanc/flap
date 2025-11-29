@@ -1,20 +1,8 @@
 import { Queue } from 'bullmq';
 import { SearchRequest } from '../types';
+import { getRedisConfig } from '../jobs/config/redis-config';
 
-interface RedisConnectionConfig {
-  host: string;
-  port: number;
-  password?: string;
-}
-
-const queueRedisConfig: RedisConnectionConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-};
-
-if (process.env.REDIS_PASSWORD) {
-  queueRedisConfig.password = process.env.REDIS_PASSWORD;
-}
+const queueRedisConfig = getRedisConfig();
 
 export const flightQueue = new Queue('flight-search', {
   connection: queueRedisConfig,
@@ -34,7 +22,7 @@ export async function addFlightJob(
   console.log(`📤 Adding job for search ${searchId}, source ${source}`);
   try {
     const job = await flightQueue.add(
-      `fetch-${source}`,
+      `fetch-${searchId}`,
       {
         searchId,
         source,

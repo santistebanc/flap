@@ -64,15 +64,6 @@ export const searchResultSchema = z.object({
   deals: z.array(dealSchema),
 });
 
-// Search status schema
-export const searchStatusSchema = z.object({
-  searchId: z.string().optional(),
-  status: z.string(),
-  jobs: z.record(z.string(), jobStatusSchema).optional(),
-  results: z.array(searchResultSchema).optional(),
-  error: z.string().optional(),
-});
-
 // Search results schema
 export const searchResultsSchema = z.object({
   searchId: z.string(),

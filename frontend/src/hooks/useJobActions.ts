@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { JobStatus } from './useSearchState';
 import { SearchRequest } from '../types';
-import { fetchSource, getFetchStatus } from '../services/api';
+import { fetchSource } from '../services/api';
 import { isValidRequest } from '../utils/jobStatus';
 
 interface UseJobActionsProps {
@@ -34,20 +34,6 @@ export function useJobActions({ jobs, searchRequest, onJobUpdate }: UseJobAction
         status: response.job.status as JobStatus['status'],
         searchId: sourceSearchId,
       };
-
-      // Refresh all job statuses to get latest info
-      try {
-        const statusResponse = await getFetchStatus(searchRequest!);
-        if (statusResponse.jobs) {
-          // Merge the updated jobs with the status response
-          const jobs = statusResponse.jobs;
-          Object.keys(jobs).forEach((key) => {
-            updatedJobs[key] = jobs[key] as JobStatus;
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to refresh job statuses:', error);
-      }
 
       onJobUpdate?.(updatedJobs);
     } catch (error) {

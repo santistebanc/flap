@@ -18,7 +18,7 @@ export function createDealFromDealData(
   flights: Flight[],
   createdAt: string
 ): Deal {
-  const dealId = generateDealId(tripId, source, dealData.provider);
+  const dealId = generateDealId(source, request, tripId, dealData.provider);
 
   return {
     id: dealId,
