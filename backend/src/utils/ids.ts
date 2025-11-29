@@ -13,7 +13,7 @@ export function generateFlightId(flight: {
   if (sanitizedTime.match(/^\d{2}-\d{2}-\d{2}$/)) {
     sanitizedTime = sanitizedTime.substring(0, 5); // Keep only HH-MM
   }
-  return `${flight.flightNumber}_${flight.origin}_${flight.departureDate}_${sanitizedTime}`;
+  return `${flight.origin}_${flight.departureDate}_${sanitizedTime}_${flight.flightNumber}`;
 }
 
 export function generateSearchId(request: {
@@ -26,7 +26,7 @@ export function generateSearchId(request: {
     request.origin,
     request.destination,
     request.departureDate,
-    request.returnDate || 'oneway',
+    request.returnDate || '-',
   ];
   return parts.join('|');
 }
@@ -37,19 +37,14 @@ export function generateSourceSearchId(source: string, request: {
   departureDate: string;
   returnDate?: string;
 }): string {
-  const parts = [
-    request.origin,
-    request.destination,
-    request.departureDate,
-    request.returnDate || 'oneway',
-    source,
-  ];
-  return parts.join('|');
+  return generateSearchId(request) + '|' + source
 }
 
 export function generateTripId(flightIds: string[]): string {
   const sortedIds = flightIds.join('|');
-  return crypto.createHash('sha256').update(sortedIds).digest('hex');
+  const hash = crypto.createHash('sha256').update(sortedIds).digest('hex');
+  // Use first 16 characters for shorter tripId (64 bits of entropy)
+  return hash.substring(0, 16);
 }
 
 export function generateDealId(
@@ -63,12 +58,12 @@ export function generateDealId(
   tripId: string,
   provider: string
 ): string {
-  const searchId = generateSourceSearchId(source, request);
-  return `${searchId}_${tripId}_${provider}`;
+  const searchId = generateSearchId(request);
+  return `${searchId}_${source}_${provider}_${tripId}`;
 }
 
 export function generateLegId(tripId: string, flightId: string, inbound: boolean): string {
-  const direction = inbound ? 'inbound' : 'outbound';
+  const direction = inbound ? 'I' : 'O';
   return `${tripId}_${direction}_${flightId}`;
 }
 

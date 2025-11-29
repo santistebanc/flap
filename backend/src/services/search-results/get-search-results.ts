@@ -3,7 +3,7 @@
  * Groups deals by trip and builds complete search results
  */
 import { getTrip, getLegsByTrip, getFlight } from '../../utils/redis';
-import { generateLegId, generateSourceSearchId } from '../../utils/ids';
+import { generateLegId, generateSearchId } from '../../utils/ids';
 import redis from '../../utils/redis/client';
 import { SearchRequest, Flight } from '../../types';
 
@@ -55,17 +55,18 @@ export async function getSearchResultsData(
   source: string
 ): Promise<SearchResult[]> {
 
-  // Generate sourceSearchId to use for direct pattern matching
-  const searchId = generateSourceSearchId(source, request);
-  const dealPattern = `deal:${searchId}_*`;
+  // Generate searchId to use for direct pattern matching
+  // Deal ID format: ${searchId}_${source}_${provider}_${tripId}
+  const searchId = generateSearchId(request);
+  const dealPattern = `deal:${searchId}_${source}_*`;
 
-  // Query deals that match the searchId pattern directly
+  // Query deals that match the searchId and source pattern directly
   const matchingDeals: any[] = [];
   let cursor = '0';
   let totalScanned = 0;
   let totalDeals = 0;
   
-  // Scan only deals that match the searchId pattern
+  // Scan only deals that match the searchId and source pattern
   do {
     const [nextCursor, keys] = await redis.scan(
       cursor,
@@ -98,25 +99,24 @@ export async function getSearchResultsData(
 
           totalDeals++;
 
-          // All deals matching the pattern already match the search criteria
-          // (since searchId includes source, origin, destination, dates)
-          matchingDeals.push({
-            id: data.id,
-            trip: data.trip,
-            origin: data.origin,
-            destination: data.destination,
-            is_round: data.is_round === 'true',
-            departure_date: data.departure_date,
-            departure_time: data.departure_time,
-            return_date: data.return_date || null,
-            return_time: data.return_time || null,
-            source: data.source,
-            provider: data.provider,
-            price: parseFloat(data.price),
-            link: data.link,
-            created_at: data.created_at,
-            updated_at: data.updated_at,
-          });
+          // All deals matching the pattern already match the search criteria and source
+            matchingDeals.push({
+              id: data.id,
+              trip: data.trip,
+              origin: data.origin,
+              destination: data.destination,
+              is_round: data.is_round === 'true',
+              departure_date: data.departure_date,
+              departure_time: data.departure_time,
+              return_date: data.return_date || null,
+              return_time: data.return_time || null,
+              source: data.source,
+              provider: data.provider,
+              price: parseFloat(data.price),
+              link: data.link,
+              created_at: data.created_at,
+              updated_at: data.updated_at,
+            });
         }
       }
     }
