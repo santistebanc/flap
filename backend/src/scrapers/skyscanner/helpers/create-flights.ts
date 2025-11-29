@@ -6,7 +6,7 @@ import { Flight, ScraperTools } from '../../shared/types';
 import { convertDateToYYYYMMDD } from './parse-date';
 import { parseTimeTo24Hour } from './parse-time';
 import { generateFlightId } from '../../../utils/ids';
-import { parseDurationToMinutes } from '../../../parsers/time';
+import { parseDurationToMinutes } from '../../../parsers/time/parse-duration';
 
 export async function createFlightsFromLegs(
     legs: any[],

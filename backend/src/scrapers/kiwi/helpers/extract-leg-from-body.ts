@@ -6,7 +6,7 @@ import * as cheerio from 'cheerio';
 import { Flight, ScraperTools } from '../../shared/types';
 import { parseTimeTo24Hour } from './parse-time';
 import { generateFlightId } from '../../../utils/ids';
-import { parseDurationToMinutes } from '../../../parsers/time';
+import { parseDurationToMinutes } from '../../../parsers/time/parse-duration';
 
 export interface LegData {
     flight: string;

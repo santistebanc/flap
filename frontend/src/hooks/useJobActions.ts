@@ -28,11 +28,11 @@ export function useJobActions({ jobs, searchRequest, onJobUpdate }: UseJobAction
 
       // Update the job for this source with the response
       const updatedJobs = { ...jobs };
-      const sourceSearchId = response.searchId;
+      const fetchId = response.fetchId;
       updatedJobs[source] = {
         jobId: response.job.jobId,
         status: response.job.status as JobStatus['status'],
-        searchId: sourceSearchId,
+        fetchId,
       };
 
       onJobUpdate?.(updatedJobs);

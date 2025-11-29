@@ -1,14 +1,15 @@
 import { Job } from 'bullmq';
-import { Result, err, ResultAsync } from 'neverthrow';
+import { Result, Err } from 'ts-results';
 import { match } from 'ts-pattern';
 import { FlightJobData } from '../services/queue';
 import { fetchSkyscanner } from '../scrapers/skyscanner';
 import { fetchKiwi } from '../scrapers/kiwi';
-import { convertDateToKiwiFormat } from '../parsers/date';
+import { convertDateToKiwiFormat } from '../parsers/date/convert-to-kiwi-format';
 import { storeFlight, storeTrip, storeLeg, storeDeal, getTrip } from '../utils/redis';
 import { calculateExpiration } from '../utils/redis';
 import { getOrCreateTrip } from '../builders/trip/get-or-create';
 import { Flight, Trip, Deal, Leg, ScraperTools } from '../scrapers/shared/types';
+import { fromPromise } from '../utils/result-async';
 
 /**
  * Fetch flights from Skyscanner scraper using tools to save directly to Redis
@@ -22,7 +23,7 @@ async function fetchSkyscannerFlights(
   },
   tools: ScraperTools
 ): Promise<Result<number, Error>> {
-  const resultAsync = ResultAsync.fromPromise(
+  return await fromPromise(
     (async () => {
       console.log('[Skyscanner] Starting fetch with params:', request);
       
@@ -51,7 +52,7 @@ async function fetchSkyscannerFlights(
       
       return result.dealsCount || 0;
     })(),
-    (error) => {
+    (error: unknown) => {
       const errorObj = error instanceof Error 
         ? error 
         : new Error(`[Skyscanner] Unknown error: ${String(error)}`);
@@ -62,8 +63,6 @@ async function fetchSkyscannerFlights(
       return errorObj;
     }
   );
-  
-  return await resultAsync;
 }
 
 /**
@@ -78,7 +77,7 @@ async function fetchKiwiFlights(
   },
   tools: ScraperTools
 ): Promise<Result<number, Error>> {
-  const resultAsync = ResultAsync.fromPromise(
+  return await fromPromise(
     (async () => {
       // Prepare search parameters for the Kiwi scraper (dates in DD/MM/YYYY format)
       const searchParams = {
@@ -100,7 +99,7 @@ async function fetchKiwiFlights(
       
       return result.dealsCount || 0;
     })(),
-    (error) => {
+    (error: unknown) => {
       const errorObj = error instanceof Error 
         ? error 
         : new Error(`[Kiwi] Unknown error: ${String(error)}`);
@@ -108,17 +107,15 @@ async function fetchKiwiFlights(
       return errorObj;
     }
   );
-  
-  return await resultAsync;
 }
 
 /**
  * Process a flight job: fetch flights from source and store in database
  */
 export async function processFlightJob(job: Job<FlightJobData>): Promise<number> {
-  const { searchId, source, request } = job.data;
+  const { fetchId, source, request } = job.data;
   
-  console.log(`[processFlightJob] Processing job for source: ${source}, searchId: ${searchId}`);
+  console.log(`[processFlightJob] Processing job for source: ${source}, fetchId: ${fetchId}`);
   
   const expiration = calculateExpiration(request.departureDate);
   let dealsCount = 0;
@@ -153,21 +150,17 @@ export async function processFlightJob(job: Job<FlightJobData>): Promise<number>
       return fetchSkyscannerFlights(request, tools);
     })
     .with('kiwi', () => fetchKiwiFlights(request, tools))
-    .otherwise(() => err(new Error(`Unknown source: ${source}`)));
+    .otherwise(() => Err(new Error(`Unknown source: ${source}`)));
 
   // Handle fetch result
-  const result = fetchResult.mapErr((error) => {
-    console.error(`Error fetching flights from ${source}:`, error);
-    return error;
-  });
-
-  if (result.isErr()) {
-    throw result.error;
+  if (fetchResult.err) {
+    console.error(`Error fetching flights from ${source}:`, fetchResult.val);
+    throw fetchResult.val;
   }
 
-  const fetchedDealsCount = result.value;
+  const fetchedDealsCount = fetchResult.val;
   
-  console.log(`Processed ${fetchedDealsCount} deals from ${source} for search ${searchId}`);
+  console.log(`Processed ${fetchedDealsCount} deals from ${source} for fetch ${fetchId}`);
   return fetchedDealsCount;
 }
 

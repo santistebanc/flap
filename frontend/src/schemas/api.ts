@@ -3,16 +3,6 @@
  */
 import { z } from 'zod';
 
-// Job status schema
-const jobStatusSchema = z.object({
-  jobId: z.string(),
-  status: z.enum(['pending', 'active', 'completed', 'failed']),
-  searchId: z.string().optional(),
-  resultCount: z.number().optional(),
-  lastFetchedAt: z.string().optional(),
-  completedAt: z.string().optional(),
-});
-
 // Airport schema
 const airportSchema = z.object({
   code: z.string(),
@@ -72,12 +62,12 @@ export const searchResultsSchema = z.object({
 
 // Fetch source response schema
 export const fetchSourceResponseSchema = z.object({
-  searchId: z.string(),
+  fetchId: z.string(),
   status: z.string(),
   job: z.object({
     jobId: z.string(),
     status: z.string(),
-    searchId: z.string().optional(),
+    fetchId: z.string().optional(),
   }),
 });
 

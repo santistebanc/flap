@@ -10,7 +10,7 @@ export function setupEventHandlers(worker: any): void {
   });
 
   worker.on('active', (job: Job<FlightJobData>) => {
-    console.log(`🔄 Job ${job.id} is now active for source ${job.data.source}, searchId: ${job.data.searchId}`);
+    console.log(`🔄 Job ${job.id} is now active for source ${job.data.source}, fetchId: ${job.data.fetchId}`);
   });
 
   worker.on('completed', (job: Job<FlightJobData>) => {

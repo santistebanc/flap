@@ -1,5 +1,4 @@
-import { z } from 'zod';
-import type { Deal, Flight, SearchResult } from '../types';
+import type { SearchResult } from '../types';
 import {
   searchResultsSchema,
   fetchSourceResponseSchema,
@@ -56,7 +55,7 @@ export async function fetchSource(source: string, request: {
   destination: string;
   departureDate: string;
   returnDate?: string;
-}): Promise<{ searchId: string; status: string; job: { jobId: string; status: string; searchId?: string } }> {
+}): Promise<{ fetchId: string; status: string; job: { jobId: string; status: string; fetchId?: string } }> {
   const response = await fetch(`${API_BASE_URL}/api/fetch/source/${source}`, {
     method: 'POST',
     headers: {

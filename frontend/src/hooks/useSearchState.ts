@@ -6,7 +6,7 @@ export type SearchStatus = 'idle' | 'processing' | 'completed' | 'error';
 export interface JobStatus {
   jobId?: string;
   status: 'pending' | 'active' | 'completed' | 'failed';
-  searchId?: string;
+  fetchId?: string;
   completedAt?: string;
   resultCount?: number;
   lastFetchedAt?: string;

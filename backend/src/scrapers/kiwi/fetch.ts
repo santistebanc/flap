@@ -6,7 +6,7 @@ import { getRequest } from './http/get-request';
 import { pollRequest } from './http/poll-request';
 import { extractFlights } from './extractors/extract-flights';
 import { generateLegId, generateTripId } from '../../utils/ids';
-import { parseConnectionTimeToMinutes } from '../../parsers/time';
+import { parseConnectionTimeToMinutes } from '../../parsers/time/parse-connection-time';
 
 export async function fetchKiwi(params: SearchParams = {}, tools: ScraperTools): Promise<{ dealsCount: number; success: boolean; error?: string }> {
     try {

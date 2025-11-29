@@ -5,8 +5,8 @@ import * as cheerio from 'cheerio';
 import { SearchParams, ScraperTools, Leg, Trip, Deal, Flight } from '../../shared/types';
 import { extractFlightFromSection } from './extract-from-section';
 import { generateLegId, generateTripId, generateDealId } from '../../../utils/ids';
-import { parseConnectionTimeToMinutes } from '../../../parsers/time';
-import { convertKiwiDateToISO } from '../../../parsers/date';
+import { parseConnectionTimeToMinutes } from '../../../parsers/time/parse-connection-time';
+import { convertKiwiDateToISO } from '../../../parsers/date/convert-kiwi-to-iso';
 
 export async function extractFlightFromSearchModal(
     $: cheerio.CheerioAPI,

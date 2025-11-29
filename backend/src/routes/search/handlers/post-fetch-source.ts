@@ -3,7 +3,7 @@
  */
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { addFlightJob } from '../../../services/queue';
-import { generateSourceSearchId } from '../../../utils/ids';
+import { generateFetchId } from '../../../utils/ids';
 
 export async function postFetchSource(
   request: FastifyRequest,
@@ -13,13 +13,13 @@ export async function postFetchSource(
     const { source } = request.params as { source: string };
     const body = request.body as { origin: string; destination: string; departureDate: string; returnDate?: string };
     
-    const sourceSearchId = generateSourceSearchId(source, body);
+    const fetchId = generateFetchId(source, body);
     
     // Always create a new job when explicitly requested (user clicked fetch button)
-    const jobId = await addFlightJob(sourceSearchId, source, body);
+    const jobId = await addFlightJob(fetchId, source, body);
     
     return reply.code(201).send({
-      searchId: sourceSearchId,
+      fetchId,
       status: 'processing',
       job: {
         jobId,

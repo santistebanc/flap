@@ -31,7 +31,7 @@ export function generateSearchId(request: {
   return parts.join('|');
 }
 
-export function generateSourceSearchId(source: string, request: {
+export function generateFetchId(source: string, request: {
   origin: string;
   destination: string;
   departureDate: string;

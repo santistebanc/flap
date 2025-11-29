@@ -3,7 +3,7 @@
  */
 import { Flight, Leg } from '../../shared/types';
 import { generateLegId } from '../../../utils/ids';
-import { parseConnectionTimeToMinutes } from '../../../parsers/time';
+import { parseConnectionTimeToMinutes } from '../../../parsers/time/parse-connection-time';
 
 export interface LegWithConnectionTime {
     leg: Leg;

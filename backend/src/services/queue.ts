@@ -9,22 +9,22 @@ export const flightQueue = new Queue('flight-search', {
 });
 
 export interface FlightJobData {
-  searchId: string;
+  fetchId: string;
   source: string;
   request: SearchRequest;
 }
 
 export async function addFlightJob(
-  searchId: string,
+  fetchId: string,
   source: string,
   request: SearchRequest
 ): Promise<string> {
-  console.log(`📤 Adding job for search ${searchId}, source ${source}`);
+  console.log(`📤 Adding job for fetch ${fetchId}, source ${source}`);
   try {
     const job = await flightQueue.add(
-      `fetch-${searchId}`,
+      `fetch-${fetchId}`,
       {
-        searchId,
+        fetchId,
         source,
         request,
       } as FlightJobData,
@@ -36,10 +36,10 @@ export async function addFlightJob(
         },
       }
     );
-    console.log(`✅ Job ${job.id} added to queue for source ${source}, searchId: ${searchId}`);
+    console.log(`✅ Job ${job.id} added to queue for source ${source}, fetchId: ${fetchId}`);
     return job.id!;
   } catch (error) {
-    console.error(`❌ Failed to add job for source ${source}, searchId: ${searchId}:`, error);
+    console.error(`❌ Failed to add job for source ${source}, fetchId: ${fetchId}:`, error);
     throw error;
   }
 }

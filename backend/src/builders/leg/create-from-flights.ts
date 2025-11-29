@@ -3,7 +3,8 @@
  */
 import { Leg, Flight } from '../../types';
 import { generateLegId } from '../../utils/ids';
-import { parseConnectionTimeToMinutes, calculateConnectionTime } from '../../parsers/time';
+import { parseConnectionTimeToMinutes } from '../../parsers/time/parse-connection-time';
+import { calculateConnectionTime } from '../../parsers/time/calculate-connection-time';
 import { DealData } from '../../domains/deal/types';
 
 export function createLegsFromFlights(
